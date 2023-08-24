@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Follow;
 use App\Models\User;
+use App\Events\OurExampleEvent;
 use Illuminate\Validation\Rule;
 use Intervention\Image\Facades\Image;
 use Illuminate\Support\Facades\Storage;
@@ -51,9 +52,13 @@ class UserController extends Controller
 		View::share('sharedData', ['currentlyFollowing' => $currentlyFollowing, 'avatar' => $user->avatar, 'username' => $user->username, 'postCount' => $user->posts()->count(), 'followerCount' => $user->followers()->count(), 'followingCount' => $user->followingTheseUsers()->count()]);
 	}
 	
-	public function profile(User $user) {
+	public function profile(User $user) {	
 		$this->getSharedData($user);
 		return view('profile-posts', ['posts' => $user->posts()->latest()->get()]);	
+	}
+
+	public function profileRaw(User $user) {	
+		return response()->json(['theHTML' => view('profile-posts-only', ['posts' => $user->posts()->latest()->get()])->render(), 'docTitle' => $user->username . "'s Profile"]);
 	}
 	
 	public function profileFollowers(User $user) {
@@ -61,19 +66,28 @@ class UserController extends Controller
 		return view('profile-followers', ['followers' => $user->followers()->latest()->get()]);	
 	}
 	
+	public function profileFollowersRaw(User $user) {
+		return response()->json(['theHTML' => view('profile-followers-only', ['followers' => $user->followers()->latest()->get()])->render(), 'docTitle' => $user->username . "'s Followers"]);
+	}
+	
 	public function profilefollowing(User $user) {
 		$this->getSharedData($user);
 		return view('profile-following', ['following' => $user->followingTheseUsers()->latest()->get()]);	
 	}
 	
+	public function profileFollowingRaw(User $user) {
+		return response()->json(['theHTML' => view('profile-following-only', ['following' => $user->followingTheseUsers()->latest()->get()])->render(), 'docTitle' => 'Who ' . $user->username . " Follows"]);
+	}
+	
 	public function logout() {
-		auth()->logout();
+		event(new OurExampleEvent(['username' => auth()->user()->username, 'action' => 'logout']));	
+		auth()->logout();	
 		return redirect('/')->with('success', 'You are now logged out.');
 	}
 	
 	public function showCorrectHomepage() {
 		if (auth()->check()) {
-			return view('homepage-feed');
+			return view('homepage-feed', ['posts' => auth()->user()->feedPosts()->latest()->paginate(4)]);
 		} else {
 			return view('homepage');			
 		}
@@ -87,6 +101,7 @@ class UserController extends Controller
 		
 		if (auth()->attempt(['username' => $incomingFields['loginusername'], 'password' => $incomingFields['loginpassword']])) {
 			$request->session()->regenerate();
+			event(new OurExampleEvent(['username' => auth()->user()->username, 'action' => 'login']));	
 			return redirect('/')->with('success', 'You have successfully logged in.');
 		} else {
 			return redirect('/')->with('failure', 'Invalid login.');
